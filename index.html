@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Pro - Level Up Edition</title>
+    <title>Tetris Pro - Management Edition</title>
     <style>
         body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; flex-direction: column; overflow: hidden; }
         #game-container { display: flex; gap: 20px; background: #222; padding: 25px; border-radius: 15px; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,1); position: relative; }
@@ -12,7 +12,14 @@
         #tetrisCanvas { border: 4px solid #666; background: #000; display: block; }
         .val { font-size: 22px; color: #f1c40f; font-weight: bold; }
         #msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 32px; font-weight: bold; color: #fff; text-shadow: 0 0 15px #f1c40f; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 100; text-align: center; width: 100%; }
-        .level-up { color: #2ecc71 ! masonry; text-shadow: 0 0 10px #2ecc71; }
+        
+        /* ボタンのスタイル */
+        .btn { width: 100%; padding: 10px 0; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 5px; }
+        #pauseBtn { background: #e67e22; }
+        #pauseBtn:hover { background: #d35400; }
+        #resetBtn { background: #c0392b; }
+        #resetBtn:hover { background: #a93226; }
+        .paused { filter: blur(4px); pointer-events: none; }
     </style>
 </head>
 <body>
@@ -23,6 +30,8 @@
         <div class="box">HOLD<canvas id="holdCanvas" width="60" height="60"></canvas></div>
         <div class="box">SCORE<div id="scoreDisplay" class="val">0</div></div>
         <div class="box">LEVEL<div id="levelDisplay" class="val" style="color:#2ecc71;">1</div></div>
+        <button id="pauseBtn" class="btn">一時停止</button>
+        <button id="resetBtn" class="btn">最初から</button>
     </div>
     <canvas id="tetrisCanvas" width="300" height="600"></canvas>
     <div class="sidebar">
@@ -41,76 +50,66 @@
 
     let field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
     let score = 0, level = 1, linesTotal = 0, bag = [], nextQueue = [], currentPiece = null, holdPieceType = null, canHold = true;
-    let lockTimer = 0, lastTime = 0, lastMoveWasRotate = false;
+    let lockTimer = 0, lastTime = 0, lastMoveWasRotate = false, isPaused = false;
 
-    function showMsg(text, isLevelUp = false) { 
-        const m = document.getElementById('msg'); 
-        m.innerText = text; 
-        m.className = isLevelUp ? 'level-up' : '';
-        m.style.opacity = 1; 
-        setTimeout(() => m.style.opacity = 0, 800); 
-    }
+    function showMsg(text) { const m = document.getElementById('msg'); m.innerText = text; m.style.opacity = 1; setTimeout(() => { if(!isPaused) m.style.opacity = 0; }, 800); }
 
     function fillBag() { let n = Object.keys(SHAPES); for(let i=6;i>0;i--){ let j=Math.floor(Math.random()*(i+1)); [n[i],n[j]]=[n[j],n[i]]; } bag = bag.concat(n); }
     function getNextPiece(type = null) { if(!type){ if(bag.length<7) fillBag(); type = nextQueue.shift(); nextQueue.push(bag.shift()); } return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rot: 0 }; }
     function collide(nx, ny, s) { return s.some((row, y) => row.some((v, x) => v && (nx+x<0 || nx+x>=COLS || ny+y>=ROWS || (ny+y>=0 && field[ny+y][nx+x])))); }
 
     function tryRotate(dir) {
-        if(currentPiece.type==='O') return;
+        if(currentPiece.type==='O' || isPaused) return;
         const ns = dir===1 ? currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i]).reverse()) : currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i])).reverse();
         const nr = (currentPiece.rot + dir + 4) % 4;
         const kicks = currentPiece.type==='I' ? KICKS.I[`${currentPiece.rot}-${nr}`] : KICKS[`${currentPiece.rot}-${nr}`];
-        for(let [kx, ky] of kicks) {
-            if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) {
-                currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr;
-                lastMoveWasRotate = true; lockTimer=0; return;
-            }
-        }
+        for(let [kx, ky] of kicks) { if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) { currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr; lastMoveWasRotate = true; lockTimer=0; return; } }
     }
 
     function freeze() {
         let isTSpin = false;
         if(currentPiece.type === 'T' && lastMoveWasRotate) {
             let corners = 0;
-            [[0,0],[2,0],[0,2],[2,2]].forEach(([dx,dy]) => {
-                let tx=currentPiece.x+dx, ty=currentPiece.y+dy;
-                if(tx<0||tx>=COLS||ty>=ROWS||(ty>=0&&field[ty][tx])) corners++;
-            });
+            [[0,0],[2,0],[0,2],[2,2]].forEach(([dx,dy]) => { let tx=currentPiece.x+dx, ty=currentPiece.y+dy; if(tx<0||tx>=COLS||ty>=ROWS||(ty>=0&&field[ty][tx])) corners++; });
             if(corners >= 3) isTSpin = true;
         }
-
         currentPiece.shape.forEach((row, y) => row.forEach((v, x) => { if(v && currentPiece.y+y>=0) field[currentPiece.y+y][currentPiece.x+x] = currentPiece.color; }));
-        
         let lines = 0;
         field = field.filter(row => { if(row.every(v => v!==0)) { lines++; return false; } return true; });
         while(field.length < ROWS) field.unshift(Array(COLS).fill(0));
-
-        let addScore = 0;
-        if(isTSpin) {
-            addScore = [400, 800, 1200, 1600][lines] || 400;
-            showMsg(lines > 0 ? `T-SPIN ${['','SINGLE','DOUBLE','TRIPLE'][lines]}` : "T-SPIN");
-        } else {
-            addScore = [0, 100, 300, 500, 800][lines];
-            if(lines === 4) showMsg("TETRIS!");
-        }
-
+        let addScore = isTSpin ? ([400, 800, 1200, 1600][lines] || 400) : ([0, 100, 300, 500, 800][lines]);
+        if(lines === 4) showMsg("TETRIS!");
+        if(isTSpin) showMsg("T-SPIN!");
         score += addScore * level;
-        if(field.every(row => row.every(v => v === 0)) && lines > 0) { score += 3000 * level; showMsg("PERFECT CLEAR!"); }
-        
-        linesTotal += lines;
-        let oldLevel = level;
-        level = Math.floor(linesTotal / 10) + 1; // 10列消すごとにレベルアップ
-        
-        if (level > oldLevel) showMsg(`LEVEL UP! (Lv.${level})`, true);
-
-        document.getElementById('scoreDisplay').innerText = score;
-        document.getElementById('levelDisplay').innerText = level;
-
+        linesTotal += lines; level = Math.floor(linesTotal/10)+1;
+        document.getElementById('scoreDisplay').innerText = score; document.getElementById('levelDisplay').innerText = level;
         currentPiece = getNextPiece(); canHold = true; updatePreviews();
-        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { alert("GAME OVER"); location.reload(); }
+        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { alert("GAME OVER"); resetGame(); }
+    }
+
+    // --- コントロール処理 ---
+    document.getElementById('pauseBtn').onclick = togglePause;
+    document.getElementById('resetBtn').onclick = resetGame;
+
+    function togglePause() {
+        isPaused = !isPaused;
+        document.getElementById('pauseBtn').innerText = isPaused ? "再開" : "一時停止";
+        document.getElementById('tetrisCanvas').className = isPaused ? 'paused' : '';
+        if(isPaused) showMsg("PAUSED");
+        else document.getElementById('msg').style.opacity = 0;
+    }
+
+    function resetGame() {
+        field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        score = 0; level = 1; linesTotal = 0; bag = []; nextQueue = []; holdPieceType = null; canHold = true;
+        document.getElementById('scoreDisplay').innerText = "0";
+        document.getElementById('levelDisplay').innerText = "1";
+        if(isPaused) togglePause();
+        fillBag(); nextQueue = bag.splice(0,5); currentPiece = getNextPiece(); updatePreviews();
     }
 
     document.addEventListener('keydown', e => {
+        if(isPaused) return;
         const k = e.key.toLowerCase();
         if(k==='a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; lockTimer=0; }
         if(k==='d' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; lockTimer=0; }
@@ -126,26 +125,27 @@
     }
 
     function gameLoop(time = 0) {
-        // --- 落下速度の計算ロジック ---
-        // レベル1: 800ms, レベル5: 480ms, レベル10: 80ms (限界速度)
-        const gravityDelay = Math.max(80, 800 - (level - 1) * 80);
-
-        if(time - lastTime > gravityDelay) {
-            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lockTimer=0; }
-            else { if(lockTimer===0) lockTimer=time; else if(time-lockTimer>500) { freeze(); lockTimer=0; } }
-            lastTime = time;
+        if(!isPaused) {
+            const gravityDelay = Math.max(80, 800 - (level - 1) * 80);
+            if(time - lastTime > gravityDelay) {
+                if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lockTimer=0; }
+                else { if(lockTimer===0) lockTimer=time; else if(time-lockTimer>500) { freeze(); lockTimer=0; } }
+                lastTime = time;
+            }
         }
         ctx.clearRect(0,0,300,600);
         field.forEach((row,y) => row.forEach((v,x) => { if(v){ ctx.fillStyle=v; ctx.fillRect(x*30+1, y*30+1, 28, 28); }}));
-        let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
-        currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-            if(v){ ctx.globalAlpha=0.3; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (g+y)*30+1, 28, 28); ctx.globalAlpha=1;
-                   ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (currentPiece.y+y)*30+1, 28, 28); }
-        }));
+        if(currentPiece) {
+            let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
+            currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
+                if(v){ ctx.globalAlpha=0.3; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (g+y)*30+1, 28, 28); ctx.globalAlpha=1;
+                       ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (currentPiece.y+y)*30+1, 28, 28); }
+            }));
+        }
         requestAnimationFrame(gameLoop);
     }
 
-    fillBag(); nextQueue=bag.splice(0,5); currentPiece=getNextPiece(); updatePreviews(); gameLoop();
+    resetGame(); gameLoop();
 </script>
 </body>
 </html>
