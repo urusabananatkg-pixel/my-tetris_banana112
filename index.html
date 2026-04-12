@@ -3,96 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Ultimate - SRS Edition</title>
+    <title>Tetris Pro - Level Up Edition</title>
     <style>
-        body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: sans-serif; flex-direction: column; overflow: hidden; }
-        #game-container { display: flex; gap: 20px; background: #222; padding: 25px; border-radius: 15px; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,1); }
-        .sidebar { width: 100px; display: flex; flex-direction: column; gap: 15px; }
-        .box { background: #333; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #555; font-size: 12px; }
-        #tetrisCanvas { border: 4px solid #666; background: #000; }
-        #scoreDisplay { font-size: 20px; color: #f1c40f; font-weight: bold; }
-        .controls { margin-top: 15px; font-size: 12px; color: #777; text-align: center; }
+        body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; flex-direction: column; overflow: hidden; }
+        #game-container { display: flex; gap: 20px; background: #222; padding: 25px; border-radius: 15px; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,1); position: relative; }
+        .sidebar { width: 110px; display: flex; flex-direction: column; gap: 15px; }
+        .box { background: #333; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #555; }
+        #tetrisCanvas { border: 4px solid #666; background: #000; display: block; }
+        .val { font-size: 22px; color: #f1c40f; font-weight: bold; }
+        #msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 32px; font-weight: bold; color: #fff; text-shadow: 0 0 15px #f1c40f; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 100; text-align: center; width: 100%; }
+        .level-up { color: #2ecc71 ! masonry; text-shadow: 0 0 10px #2ecc71; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
+    <div id="msg"></div>
     <div class="sidebar">
         <div class="box">HOLD<canvas id="holdCanvas" width="60" height="60"></canvas></div>
-        <div class="box">SCORE<div id="scoreDisplay">0</div></div>
-        <div class="box">LEVEL<div id="levelDisplay" style="font-size:18px; color:#2ecc71;">1</div></div>
+        <div class="box">SCORE<div id="scoreDisplay" class="val">0</div></div>
+        <div class="box">LEVEL<div id="levelDisplay" class="val" style="color:#2ecc71;">1</div></div>
     </div>
     <canvas id="tetrisCanvas" width="300" height="600"></canvas>
     <div class="sidebar">
-        <div class="box">NEXT<canvas id="nextCanvas" width="60" height="250"></canvas></div>
+        <div class="box">NEXT<canvas id="nextCanvas" width="60" height="300"></canvas></div>
     </div>
 </div>
-<div class="controls">A/D:移動 | S:加速 | W:即設置 | K/L:回転 | I/J:ホールド</div>
 
 <script>
     const canvas = document.getElementById('tetrisCanvas'), ctx = canvas.getContext('2d');
     const holdCtx = document.getElementById('holdCanvas').getContext('2d'), nextCtx = document.getElementById('nextCanvas').getContext('2d');
     const ROWS = 20, COLS = 10, BLOCK_SIZE = 30;
+
     const SHAPES = { 'I':[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], 'J':[[1,0,0],[1,1,1],[0,0,0]], 'L':[[0,0,1],[1,1,1],[0,0,0]], 'O':[[1,1],[1,1]], 'S':[[0,1,1],[1,1,0],[0,0,0]], 'T':[[0,1,0],[1,1,1],[0,0,0]], 'Z':[[1,1,0],[0,1,1],[0,0,0]] };
     const COLORS = { 'I':'#00f0f0', 'J':'#0000f0', 'L':'#f0a000', 'O':'#f0f000', 'S':'#00f000', 'T':'#a000f0', 'Z':'#f00000' };
-    const KICKS = { "0-1":[ [0,0],[-1,0],[-1,1],[0,-2],[-1,-2] ], "1-0":[ [0,0],[1,0],[1,-1],[0,2],[1,2] ], "1-2":[ [0,0],[1,0],[1,-1],[0,2],[1,2] ], "2-1":[ [0,0],[-1,0],[-1,1],[0,-2],[-1,-2] ], "2-3":[ [0,0],[1,0],[1,1],[0,-2],[1,-2] ], "3-2":[ [0,0],[-1,0],[-1,-1],[0,2],[-1,2] ], "3-0":[ [0,0],[-1,0],[-1,-1],[0,2],[-1,2] ], "0-3":[ [0,0],[1,0],[1,1],[0,-2],[1,-2] ], "I": { "0-1":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], "1-0":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], "1-2":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]], "2-1":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], "2-3":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], "3-2":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], "3-0":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], "0-3":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]] } };
+    const KICKS = { "0-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "1-0":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "1-2":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "2-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "2-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "3-2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "3-0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "0-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "I":{"0-1":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],"1-0":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],"1-2":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]],"2-1":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],"2-3":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],"3-2":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],"3-0":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],"0-3":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]}};
 
     let field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-    let score = 0, level = 1, bag = [], nextQueue = [], currentPiece = null, holdPieceType = null, canHold = true, lockTimer = 0, lastTime = 0;
+    let score = 0, level = 1, linesTotal = 0, bag = [], nextQueue = [], currentPiece = null, holdPieceType = null, canHold = true;
+    let lockTimer = 0, lastTime = 0, lastMoveWasRotate = false;
 
-    function generateBag() { let n = Object.keys(SHAPES); for (let i = 6; i > 0; i--) { let j = Math.floor(Math.random()*(i+1)); [n[i],n[j]]=[n[j],n[i]]; } return n; }
-    function getNextPiece(type = null) { if(!type){ if(bag.length===0) bag=generateBag(); type=nextQueue.shift(); nextQueue.push(bag.shift()); } return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rot: 0 }; }
+    function showMsg(text, isLevelUp = false) { 
+        const m = document.getElementById('msg'); 
+        m.innerText = text; 
+        m.className = isLevelUp ? 'level-up' : '';
+        m.style.opacity = 1; 
+        setTimeout(() => m.style.opacity = 0, 800); 
+    }
+
+    function fillBag() { let n = Object.keys(SHAPES); for(let i=6;i>0;i--){ let j=Math.floor(Math.random()*(i+1)); [n[i],n[j]]=[n[j],n[i]]; } bag = bag.concat(n); }
+    function getNextPiece(type = null) { if(!type){ if(bag.length<7) fillBag(); type = nextQueue.shift(); nextQueue.push(bag.shift()); } return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rot: 0 }; }
     function collide(nx, ny, s) { return s.some((row, y) => row.some((v, x) => v && (nx+x<0 || nx+x>=COLS || ny+y>=ROWS || (ny+y>=0 && field[ny+y][nx+x])))); }
-    function rotate(s, d) { return d===1 ? s[0].map((_,i)=>s.map(r=>r[i]).reverse()) : s[0].map((_,i)=>s.map(r=>r[i])).reverse(); }
 
     function tryRotate(dir) {
         if(currentPiece.type==='O') return;
-        const ns = rotate(currentPiece.shape, dir), nr = (currentPiece.rot + dir + 4) % 4;
+        const ns = dir===1 ? currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i]).reverse()) : currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i])).reverse();
+        const nr = (currentPiece.rot + dir + 4) % 4;
         const kicks = currentPiece.type==='I' ? KICKS.I[`${currentPiece.rot}-${nr}`] : KICKS[`${currentPiece.rot}-${nr}`];
-        for(let [kx, ky] of kicks) { if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) { currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr; lockTimer=0; return; } }
+        for(let [kx, ky] of kicks) {
+            if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) {
+                currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr;
+                lastMoveWasRotate = true; lockTimer=0; return;
+            }
+        }
     }
 
     function freeze() {
+        let isTSpin = false;
+        if(currentPiece.type === 'T' && lastMoveWasRotate) {
+            let corners = 0;
+            [[0,0],[2,0],[0,2],[2,2]].forEach(([dx,dy]) => {
+                let tx=currentPiece.x+dx, ty=currentPiece.y+dy;
+                if(tx<0||tx>=COLS||ty>=ROWS||(ty>=0&&field[ty][tx])) corners++;
+            });
+            if(corners >= 3) isTSpin = true;
+        }
+
         currentPiece.shape.forEach((row, y) => row.forEach((v, x) => { if(v && currentPiece.y+y>=0) field[currentPiece.y+y][currentPiece.x+x] = currentPiece.color; }));
-        field = field.filter(row => !row.every(v => v!==0));
-        while(field.length < ROWS) { field.unshift(Array(COLS).fill(0)); score += 100 * level; }
+        
+        let lines = 0;
+        field = field.filter(row => { if(row.every(v => v!==0)) { lines++; return false; } return true; });
+        while(field.length < ROWS) field.unshift(Array(COLS).fill(0));
+
+        let addScore = 0;
+        if(isTSpin) {
+            addScore = [400, 800, 1200, 1600][lines] || 400;
+            showMsg(lines > 0 ? `T-SPIN ${['','SINGLE','DOUBLE','TRIPLE'][lines]}` : "T-SPIN");
+        } else {
+            addScore = [0, 100, 300, 500, 800][lines];
+            if(lines === 4) showMsg("TETRIS!");
+        }
+
+        score += addScore * level;
+        if(field.every(row => row.every(v => v === 0)) && lines > 0) { score += 3000 * level; showMsg("PERFECT CLEAR!"); }
+        
+        linesTotal += lines;
+        let oldLevel = level;
+        level = Math.floor(linesTotal / 10) + 1; // 10列消すごとにレベルアップ
+        
+        if (level > oldLevel) showMsg(`LEVEL UP! (Lv.${level})`, true);
+
         document.getElementById('scoreDisplay').innerText = score;
+        document.getElementById('levelDisplay').innerText = level;
+
         currentPiece = getNextPiece(); canHold = true; updatePreviews();
-        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) location.reload();
+        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { alert("GAME OVER"); location.reload(); }
     }
 
     document.addEventListener('keydown', e => {
         const k = e.key.toLowerCase();
-        if(k==='a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) currentPiece.x--;
-        if(k==='d' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) currentPiece.x++;
-        if(k==='s' && !collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++;
+        if(k==='a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; lockTimer=0; }
+        if(k==='d' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; lockTimer=0; }
+        if(k==='s' && !collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lastMoveWasRotate=false; }
         if(k==='w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
         if(k==='k') tryRotate(-1); if(k==='l') tryRotate(1);
         if((k==='i'||k==='j') && canHold) { let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }
     });
 
     function updatePreviews() {
-        nextCtx.clearRect(0,0,60,250); nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*10+10, i*45+y*10+10, 9, 9); }})));
-        holdCtx.clearRect(0,0,60,60); if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*10+10, y*10+10, 9, 9); }}));
+        nextCtx.clearRect(0,0,60,300); nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*10+10, i*55+y*10+10, 9, 9); }})));
+        holdCtx.clearRect(0,0,60,60); if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*12+10, y*12+10, 11, 11); }}));
     }
 
     function gameLoop(time = 0) {
-        if(time - lastTime > Math.max(100, 800 - (level-1)*100)) {
+        // --- 落下速度の計算ロジック ---
+        // レベル1: 800ms, レベル5: 480ms, レベル10: 80ms (限界速度)
+        const gravityDelay = Math.max(80, 800 - (level - 1) * 80);
+
+        if(time - lastTime > gravityDelay) {
             if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lockTimer=0; }
             else { if(lockTimer===0) lockTimer=time; else if(time-lockTimer>500) { freeze(); lockTimer=0; } }
             lastTime = time;
         }
         ctx.clearRect(0,0,300,600);
-        field.forEach((row,y) => row.forEach((v,x) => { if(v){ ctx.fillStyle=v; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }}));
+        field.forEach((row,y) => row.forEach((v,x) => { if(v){ ctx.fillStyle=v; ctx.fillRect(x*30+1, y*30+1, 28, 28); }}));
         let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
         currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-            if(v){ ctx.globalAlpha=0.3; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (g+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); ctx.globalAlpha=1;
-                   ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }
+            if(v){ ctx.globalAlpha=0.3; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (g+y)*30+1, 28, 28); ctx.globalAlpha=1;
+                   ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (currentPiece.y+y)*30+1, 28, 28); }
         }));
         requestAnimationFrame(gameLoop);
     }
 
-    bag=generateBag(); nextQueue=bag.splice(0,5); currentPiece=getNextPiece(); updatePreviews(); gameLoop();
+    fillBag(); nextQueue=bag.splice(0,5); currentPiece=getNextPiece(); updatePreviews(); gameLoop();
 </script>
 </body>
 </html>
