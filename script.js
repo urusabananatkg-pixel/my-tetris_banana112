@@ -1,294 +1,188 @@
-import IPython
+if (window.gameInterval) clearInterval(window.gameInterval);
+const canvas = document.getElementById('tetrisCanvas');
+const ctx = canvas.getContext('2d');
+const holdCtx = document.getElementById('holdCanvas').getContext('2d');
+const nextCtx = document.getElementById('nextCanvas').getContext('2d');
 
-html_code = """
-<div id="game-container" style="display: flex; justify-content: center; align-items: flex-start; gap: 20px; background: #1a1a1a; padding: 25px; border-radius: 15px; color: white; font-family: sans-serif; box-shadow: 0 20px 50px rgba(0,0,0,0.8);">
-    
-    <div style="width: 140px; display: flex; flex-direction: column; gap: 15px;">
-        <div style="background: #2a2a2a; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #444;">
-            <div style="font-size: 11px; color: #888;">HOLD</div>
-            <canvas id="holdCanvas" width="60" height="60"></canvas>
-        </div>
-        <div style="background: #2a2a2a; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #444;">
-            <div style="font-size: 11px; color: #888;">SCORE</div>
-            <div id="scoreDisplay" style="font-size: 20px; font-weight: bold; color: #f1c40f;">0</div>
-            <div style="font-size: 11px; color: #888; margin-top:5px;">LEVEL: <span id="levelDisplay" style="color:#2ecc71;">1</span></div>
-        </div>
-        <div style="background: #2a2a2a; padding: 10px; border-radius: 8px; border: 1px solid #444;">
-            <div style="font-size: 11px; color: #888; text-align: center; border-bottom: 1px solid #444; margin-bottom: 5px;">TOP 5</div>
-            <div id="rankingList" style="font-size: 11px; line-height: 1.6;"></div>
-        </div>
-    </div>
+const ROWS = 20, COLS = 10, BLOCK_SIZE = 30;
+const SHAPES = {
+    'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    'J': [[1,0,0],[1,1,1],[0,0,0]], 'L': [[0,0,1],[1,1,1],[0,0,0]],
+    'O': [[1,1],[1,1]], 'S': [[0,1,1],[1,1,0],[0,0,0]],
+    'T': [[0,1,0],[1,1,1],[0,0,0]], 'Z': [[1,1,0],[0,1,1],[0,0,0]]
+};
+const COLORS = { 'I': '#00f0f0', 'J': '#0000f0', 'L': '#f0a000', 'O': '#f0f000', 'S': '#00f000', 'T': '#a000f0', 'Z': '#f00000' };
 
-    <div style="position: relative;">
-        <canvas id="tetrisCanvas" width="300" height="600" style="border: 4px solid #444; background: #000; border-radius: 5px;"></canvas>
-        <div id="msg" style="position: absolute; top: 45%; width: 100%; text-align: center; font-size: 28px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #000; pointer-events: none; opacity: 0; transition: opacity 0.2s;"></div>
-    </div>
+const WALL_KICK = {
+    'others': { '0-1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '1-0':[[0,0],[1,0],[1,-1],[0,2],[1,2]], '1-2':[[0,0],[1,0],[1,-1],[0,2],[1,2]], '2-1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '2-3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]], '3-2':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], '3-0':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], '0-3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]] },
+    'I': { '0-1':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], '1-0':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], '1-2':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]], '2-1':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], '2-3':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], '3-2':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], '3-0':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], '0-3':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]] }
+};
 
-    <div style="width: 100px; background: #2a2a2a; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: center;">
-        <div style="font-size: 11px; color: #888; margin-bottom: 10px;">NEXT</div>
-        <canvas id="nextCanvas" width="60" height="320"></canvas>
-    </div>
-</div>
+let field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+let score = 0, level = 1, linesTotal = 0;
+let bag = [], nextQueue = [], currentPiece = null, holdPieceType = null;
+let canHold = true, lockTimer = null, isLanding = false, lastMoveWasRotate = false;
+let flashingLines = [];
+const keys = {};
+let dasTimer = null, arrInterval = null;
+const DAS_DELAY = 170, ARR_SPEED = 30;
 
-<script>
-    if (window.gameInterval) clearInterval(window.gameInterval);
-    const canvas = document.getElementById('tetrisCanvas');
-    const ctx = canvas.getContext('2d');
-    const holdCtx = document.getElementById('holdCanvas').getContext('2d');
-    const nextCtx = document.getElementById('nextCanvas').getContext('2d');
-    
-    const ROWS = 20, COLS = 10, BLOCK_SIZE = 30;
-    const SHAPES = {
-        'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-        'J': [[1,0,0],[1,1,1],[0,0,0]], 'L': [[0,0,1],[1,1,1],[0,0,0]],
-        'O': [[1,1],[1,1]], 'S': [[0,1,1],[1,1,0],[0,0,0]],
-        'T': [[0,1,0],[1,1,1],[0,0,0]], 'Z': [[1,1,0],[0,1,1],[0,0,0]]
-    };
-    const COLORS = { 'I': '#00f0f0', 'J': '#0000f0', 'L': '#f0a000', 'O': '#f0f000', 'S': '#00f000', 'T': '#a000f0', 'Z': '#f00000' };
+function updateRanking(s) {
+    let r = JSON.parse(localStorage.getItem('tetrisRanking') || '[]');
+    r.push(s); r.sort((a,b)=>b-a); r = r.slice(0,5);
+    localStorage.setItem('tetrisRanking', JSON.stringify(r));
+    displayRanking();
+}
 
-    const WALL_KICK = {
-        'others': { '0-1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '1-0':[[0,0],[1,0],[1,-1],[0,2],[1,2]], '1-2':[[0,0],[1,0],[1,-1],[0,2],[1,2]], '2-1':[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '2-3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]], '3-2':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], '3-0':[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], '0-3':[[0,0],[1,0],[1,1],[0,-2],[1,-2]] },
-        'I': { '0-1':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], '1-0':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], '1-2':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]], '2-1':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], '2-3':[[0,0],[2,0],[-1,0],[2,1],[-1,-2]], '3-2':[[0,0],[-2,0],[1,0],[-2,-1],[1,2]], '3-0':[[0,0],[1,0],[-2,0],[1,-2],[-2,1]], '0-3':[[0,0],[-1,0],[2,0],[-1,2],[2,-1]] }
-    };
+function displayRanking() {
+    const r = JSON.parse(localStorage.getItem('tetrisRanking') || '[]');
+    document.getElementById('rankingList').innerHTML = r.map((s,i)=>`<div>${i+1}. ${s.toLocaleString()}</div>`).join('') || "No Data";
+}
 
-    let field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-    let score = 0, level = 1, linesTotal = 0;
-    let bag = [], nextQueue = [], currentPiece = null, holdPieceType = null;
-    let canHold = true, lockTimer = null, isLanding = false, lastMoveWasRotate = false;
-    let flashingLines = [];
+function fillBag() { let n=['I','J','L','O','S','T','Z']; for(let i=6;i>0;i--){let j=Math.floor(Math.random()*(i+1));[n[i],n[j]]=[n[j],n[i]];} bag=bag.concat(n); }
+function initQueue() { fillBag(); while(nextQueue.length<5) nextQueue.push(bag.shift()); }
+function getNextPiece(type = null) {
+    if(!type){ type=nextQueue.shift(); if(bag.length<7) fillBag(); nextQueue.push(bag.shift()); }
+    isLanding=false; resetLockTimer();
+    return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rotation: 0 };
+}
+function resetLockTimer() { clearTimeout(lockTimer); if(isLanding) lockTimer = setTimeout(freeze, 800); }
 
-    // DAS / 移動制御
-    const keys = {};
-    let dasTimer = null, arrInterval = null;
-    const DAS_DELAY = 170, ARR_SPEED = 30;
+function updateSpeed() {
+    clearInterval(window.gameInterval);
+    const delay = Math.max(50, 800 * Math.pow(0.7, level - 1));
+    window.gameInterval = setInterval(() => {
+        if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
+            currentPiece.y++; lastMoveWasRotate = false; handleLocking();
+        } else handleLocking();
+    }, delay);
+}
 
-    function updateRanking(s) {
-        let r = JSON.parse(localStorage.getItem('tetrisRanking') || '[]');
-        r.push(s); r.sort((a,b)=>b-a); r = r.slice(0,5);
-        localStorage.setItem('tetrisRanking', JSON.stringify(r));
-        displayRanking();
-    }
-    function displayRanking() {
-        const r = JSON.parse(localStorage.getItem('tetrisRanking') || '[]');
-        document.getElementById('rankingList').innerHTML = r.map((s,i)=>`<div>${i+1}. ${s.toLocaleString()}</div>`).join('') || "No Data";
-    }
+function collide(nx, ny, shape) {
+    return shape.some((row, y) => row.some((v, x) => v && (nx+x<0 || nx+x>=COLS || ny+y>=ROWS || (ny+y>=0 && field[ny+y][nx+x]))));
+}
 
-    function fillBag() { let n=['I','J','L','O','S','T','Z']; for(let i=6;i>0;i--){let j=Math.floor(Math.random()*(i+1));[n[i],n[j]]=[n[j],n[i]];} bag=bag.concat(n); }
-    function initQueue() { fillBag(); while(nextQueue.length<5) nextQueue.push(bag.shift()); }
-    
-    function getNextPiece(type = null) {
-        if(!type){ type=nextQueue.shift(); if(bag.length<7) fillBag(); nextQueue.push(bag.shift()); }
-        isLanding=false; resetLockTimer();
-        return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rotation: 0 };
-    }
-
-    function resetLockTimer() {
-        clearTimeout(lockTimer);
-        if(isLanding) lockTimer = setTimeout(freeze, 800); // 猶予リセット
-    }
-
-    function updateSpeed() {
-        clearInterval(window.gameInterval);
-        const delay = Math.max(50, 800 * Math.pow(0.7, level - 1));
-        window.gameInterval = setInterval(() => {
-            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
-                currentPiece.y++; lastMoveWasRotate = false; handleLocking();
-            } else handleLocking();
-        }, delay);
-    }
-
-    function collide(nx, ny, shape) {
-        return shape.some((row, y) => row.some((v, x) => v && (nx+x<0 || nx+x>=COLS || ny+y>=ROWS || (ny+y>=0 && field[ny+y][nx+x]))));
-    }
-
-    async function freeze() {
-        currentPiece.shape.forEach((row, dy) => row.forEach((val, dx) => {
-            if(val && currentPiece.y+dy >= 0) field[currentPiece.y+dy][currentPiece.x+dx] = currentPiece.color;
-        }));
-
-        let lines = [];
-        for(let r=0; r<ROWS; r++) if(field[r].every(v => v !== 0)) lines.push(r);
-
-        if(lines.length > 0) {
-            flashingLines = lines;
-            await new Promise(r => setTimeout(r, 100)); // フラッシュ演出
-            flashingLines = [];
-            lines.forEach(r => { field.splice(r,1); field.unshift(Array(COLS).fill(0)); });
-
-            // スコア計算
-            let corners = 0;
-            if(currentPiece.type === 'T' && lastMoveWasRotate) {
-                [[0,0],[2,0],[0,2],[2,2]].forEach(([dx, dy]) => {
-                    let tx = currentPiece.x + dx, ty = currentPiece.y + dy;
-                    if(tx<0 || tx>=COLS || ty>=ROWS || (ty>=0 && field[ty][tx])) corners++;
-                });
-            }
-            let isTS = (currentPiece.type === 'T' && lastMoveWasRotate && corners >= 3);
-            let moveScore = 0, msg = "";
-            let l = lines.length;
-            if(isTS) {
-                if(l === 1) { moveScore = 800 * level; msg = "T-SPIN SINGLE"; }
-                else if(l === 2) { moveScore = 1200 * level; msg = "T-SPIN DOUBLE"; }
-                else if(l === 3) { moveScore = 1600 * level; msg = "T-SPIN TRIPLE"; }
-            } else {
-                if(l === 1) moveScore = 100 * level;
-                else if(l === 2) moveScore = 300 * level;
-                else if(l === 3) moveScore = 500 * level;
-                else if(l === 4) { moveScore = 800 * level; msg = "TETRIS!"; }
-            }
-            if(field.every(row => row.every(v => v === 0))) { moveScore += 3000 * level; msg = "PERFECT CLEAR!!"; }
-            
-            score += moveScore; linesTotal += l;
-            level = Math.floor(linesTotal / 10) + 1;
-            document.getElementById('levelDisplay').innerText = level;
-            document.getElementById('scoreDisplay').innerText = score;
-            if(msg) {
-                const mb = document.getElementById('msg'); mb.innerText = msg; mb.style.opacity = 1;
-                setTimeout(()=>mb.style.opacity=0, 1000);
-            }
-            updateSpeed();
+async function freeze() {
+    currentPiece.shape.forEach((row, dy) => row.forEach((val, dx) => {
+        if(val && currentPiece.y+dy >= 0) field[currentPiece.y+dy][currentPiece.x+dx] = currentPiece.color;
+    }));
+    let lines = [];
+    for(let r=0; r<ROWS; r++) if(field[r].every(v => v !== 0)) lines.push(r);
+    if(lines.length > 0) {
+        flashingLines = lines;
+        await new Promise(r => setTimeout(r, 100));
+        flashingLines = [];
+        lines.forEach(r => { field.splice(r,1); field.unshift(Array(COLS).fill(0)); });
+        let corners = 0;
+        if(currentPiece.type === 'T' && lastMoveWasRotate) {
+            [[0,0],[2,0],[0,2],[2,2]].forEach(([dx, dy]) => {
+                let tx = currentPiece.x + dx, ty = currentPiece.y + dy;
+                if(tx<0 || tx>=COLS || ty>=ROWS || (ty>=0 && field[ty][tx])) corners++;
+            });
         }
+        let isTS = (currentPiece.type === 'T' && lastMoveWasRotate && corners >= 3);
+        let moveScore = 0, msg = "";
+        let l = lines.length;
+        if(isTS) {
+            if(l === 1) { moveScore = 800 * level; msg = "T-SPIN SINGLE"; }
+            else if(l === 2) { moveScore = 1200 * level; msg = "T-SPIN DOUBLE"; }
+            else if(l === 3) { moveScore = 1600 * level; msg = "T-SPIN TRIPLE"; }
+        } else {
+            if(l === 1) moveScore = 100 * level;
+            else if(l === 2) moveScore = 300 * level;
+            else if(l === 3) moveScore = 500 * level;
+            else if(l === 4) { moveScore = 800 * level; msg = "TETRIS!"; }
+        }
+        if(field.every(row => row.every(v => v === 0))) { moveScore += 3000 * level; msg = "PERFECT CLEAR!!"; }
+        score += moveScore; linesTotal += l;
+        level = Math.floor(linesTotal / 10) + 1;
+        document.getElementById('levelDisplay').innerText = level;
+        document.getElementById('scoreDisplay').innerText = score;
+        if(msg) { const mb = document.getElementById('msg'); mb.innerText = msg; mb.style.opacity = 1; setTimeout(()=>mb.style.opacity=0, 1000); }
+        updateSpeed();
+    }
+    currentPiece = getNextPiece(); canHold = true; updatePreviews();
+    if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { updateRanking(score); alert("GAME OVER"); location.reload(); }
+}
 
-        currentPiece = getNextPiece(); canHold = true; updatePreviews();
-        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) {
-            updateRanking(score); alert("GAME OVER"); location.reload();
+function handleLocking() {
+    if(collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
+        if(!isLanding) { isLanding=true; resetLockTimer(); }
+    } else { isLanding=false; clearTimeout(lockTimer); }
+}
+
+window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if(keys[k]) return;
+    keys[k] = true;
+    handleKey(k);
+    if(k === 'a' || k === 'd') {
+        clearTimeout(dasTimer); clearInterval(arrInterval);
+        dasTimer = setTimeout(() => { arrInterval = setInterval(() => handleKey(k), ARR_SPEED); }, DAS_DELAY);
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    delete keys[k];
+    if(k === 'a' || k === 'd') { clearTimeout(dasTimer); clearInterval(arrInterval); }
+});
+
+function handleKey(k) {
+    if(k === 'a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; resetLockTimer(); }
+    if(k === 'd' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; resetLockTimer(); }
+    if(k === 's') { 
+        if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
+            currentPiece.y++; 
+            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++;
+            lastMoveWasRotate=false; resetLockTimer();
         }
     }
+    if(k === 'w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
+    if(k === 'i' || k === 'j') { if(canHold){ let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }}
+    if(k === 'k') { if(tryRotate(-1)) resetLockTimer(); }
+    if(k === 'l') { if(tryRotate(1)) resetLockTimer(); }
+}
 
-    function handleLocking() {
-        if(collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
-            if(!isLanding) { isLanding=true; resetLockTimer(); }
-        } else { isLanding=false; clearTimeout(lockTimer); }
-    }
-
-    // 操作系 (DAS実装)
-    window.addEventListener('keydown', (e) => {
-        const k = e.key.toLowerCase();
-        if(keys[k]) return;
-        keys[k] = true;
-        handleKey(k);
-        if(k === 'a' || k === 'd') {
-            clearTimeout(dasTimer); clearInterval(arrInterval);
-            dasTimer = setTimeout(() => {
-                arrInterval = setInterval(() => handleKey(k), ARR_SPEED);
-            }, DAS_DELAY);
+function tryRotate(dir) {
+    const type = currentPiece.type, oldRot = currentPiece.rotation, newRot = (oldRot + (dir === 1 ? 1 : 3)) % 4;
+    const newShape = (dir === 1) ? currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).map(row => row.reverse()) : currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).reverse();
+    const kicks = (type === 'I' ? WALL_KICK['I'] : WALL_KICK['others'])[`${oldRot}-${newRot}`];
+    for(let [kx, ky] of kicks) {
+        if(!collide(currentPiece.x+kx, currentPiece.y-ky, newShape)) {
+            currentPiece.x += kx; currentPiece.y -= ky; currentPiece.shape = newShape; currentPiece.rotation = newRot;
+            lastMoveWasRotate = true; return true;
         }
-    });
-    window.addEventListener('keyup', (e) => {
-        const k = e.key.toLowerCase();
-        delete keys[k];
-        if(k === 'a' || k === 'd') { clearTimeout(dasTimer); clearInterval(arrInterval); }
-    });
-
-    function handleKey(k) {
-        if(k === 'a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; resetLockTimer(); }
-        if(k === 'd' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; resetLockTimer(); }
-        if(k === 's' && !collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lastMoveWasRotate=false; resetLockTimer(); }
-        if(k === 'w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
-        if(k === 'i' || k === 'j') { if(canHold){ let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }}
-        if(k === 'k') { if(tryRotate(-1)) resetLockTimer(); }
-        if(k === 'l') { if(tryRotate(1)) resetLockTimer(); }
     }
+    return false;
+}
 
-    function tryRotate(dir) {
-        const type = currentPiece.type, oldRot = currentPiece.rotation, newRot = (oldRot + (dir === 1 ? 1 : 3)) % 4;
-        const newShape = (dir === 1) ? currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).map(row => row.reverse()) : currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).reverse();
-        const kicks = (type === 'I' ? WALL_KICK['I'] : WALL_KICK['others'])[`${oldRot}-${newRot}`];
-        for(let [kx, ky] of kicks) {
-            if(!collide(currentPiece.x+kx, currentPiece.y-ky, newShape)) {
-                currentPiece.x += kx; currentPiece.y -= ky; currentPiece.shape = newShape; currentPiece.rotation = newRot;
-                lastMoveWasRotate = true; return true;
-            }
+function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    field.forEach((row,r) => row.forEach((v,c) => {
+        if(v) {
+            ctx.fillStyle = flashingLines.includes(r) ? '#fff' : v;
+            ctx.fillRect(c*BLOCK_SIZE+1,r*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
         }
-        return false;
-    }
-
-    function draw() {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        field.forEach((row,r) => row.forEach((v,c) => {
-            if(v) {
-                ctx.fillStyle = flashingLines.includes(r) ? '#fff' : v;
-                ctx.fillRect(c*BLOCK_SIZE+1,r*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
-            }
-        }));
-        let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
-        currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-            if(v){ ctx.globalAlpha=0.2; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE, (g+y)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE); ctx.globalAlpha=1; }
-            if(v){ ctx.fillStyle=isLanding?'#fff':currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }
-        }));
-        requestAnimationFrame(draw);
-    }
-
-    function updatePreviews() {
-        nextCtx.clearRect(0,0,60,320);
-        nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*10+5, i*60+y*10+10, 9, 9); } })));
-        holdCtx.clearRect(0,0,60,60);
-        if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*10+5, y*10+10, 9, 9); } }));
-    }
-
-    initQueue(); currentPiece = getNextPiece(); updatePreviews(); updateSpeed(); displayRanking(); draw();/* --- 変更ポイント --- */
-// 1. ソフトドロップの速度調整 (handleKey関数内)
-// 2. シャドウの色の濃さ (draw関数内)
-
-// (中略：他の変数はそのまま)
-
-    function handleKey(k) {
-        if(k === 'a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; resetLockTimer(); }
-        if(k === 'd' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; resetLockTimer(); }
-        
-        // ソフトドロップ：1回押すごとに2マス落とす設定にして高速化
-        if(k === 's') { 
-            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
-                currentPiece.y++; 
-                // さらに加速したい場合はもう1段落とす
-                if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++;
-                lastMoveWasRotate=false; 
-                resetLockTimer(); 
-            }
+    }));
+    let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
+    currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
+        if(v){ 
+            ctx.globalAlpha=0.5; // シャドウを濃く(0.5)
+            ctx.fillStyle=currentPiece.color; 
+            ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (g+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
+            ctx.globalAlpha=1; 
         }
-        
-        if(k === 'w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
-        if(k === 'i' || k === 'j') { if(canHold){ let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }}
-        if(k === 'k') { if(tryRotate(-1)) resetLockTimer(); }
-        if(k === 'l') { if(tryRotate(1)) resetLockTimer(); }
-    }
+        if(v){ ctx.fillStyle=isLanding?'#fff':currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }
+    }));
+    requestAnimationFrame(draw);
+}
 
-    function draw() {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        
-        // フィールド描画
-        field.forEach((row,r) => row.forEach((v,c) => {
-            if(v) {
-                ctx.fillStyle = flashingLines.includes(r) ? '#fff' : v;
-                ctx.fillRect(c*BLOCK_SIZE+1,r*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
-            }
-        }));
+function updatePreviews() {
+    nextCtx.clearRect(0,0,60,320);
+    nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*10+5, i*60+y*10+10, 9, 9); } })));
+    holdCtx.clearRect(0,0,60,60);
+    if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*10+5, y*10+10, 9, 9); } }));
+}
 
-        // シャドウ（ゴースト）の描画
-        let g = currentPiece.y; 
-        while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
-        
-        currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-            if(v){ 
-                // 透明度を 0.2 -> 0.5 に引き上げて濃くしました
-                ctx.globalAlpha = 0.5; 
-                ctx.fillStyle = currentPiece.color; 
-                ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE + 1, (g+y)*BLOCK_SIZE + 1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
-                
-                // 枠線もつけるとさらに見やすくなります
-                ctx.strokeStyle = "rgba(255,255,255,0.5)";
-                ctx.strokeRect((currentPiece.x+x)*BLOCK_SIZE + 1, (g+y)*BLOCK_SIZE + 1, BLOCK_SIZE-2, BLOCK_SIZE-2);
-                ctx.globalAlpha = 1.0; 
-            }
-            // 操作中のミノ
-            if(v){ 
-                ctx.fillStyle = isLanding ? '#fff' : currentPiece.color; 
-                ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
-            }
-        }));
-        requestAnimationFrame(draw);
-    }
-</script>
-"""
-
-display(IPython.display.HTML(html_code))
+initQueue(); currentPiece = getNextPiece(); updatePreviews(); updateSpeed(); displayRanking(); draw();
