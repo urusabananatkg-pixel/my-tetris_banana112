@@ -3,35 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Pro - Management Edition</title>
+    <title>Tetris Pro - Ranking Edition</title>
     <style>
         body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; flex-direction: column; overflow: hidden; }
         #game-container { display: flex; gap: 20px; background: #222; padding: 25px; border-radius: 15px; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,1); position: relative; }
-        .sidebar { width: 110px; display: flex; flex-direction: column; gap: 15px; }
+        .sidebar { width: 110px; display: flex; flex-direction: column; gap: 10px; }
         .box { background: #333; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #555; }
         #tetrisCanvas { border: 4px solid #666; background: #000; display: block; }
-        .val { font-size: 22px; color: #f1c40f; font-weight: bold; }
-        #msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 32px; font-weight: bold; color: #fff; text-shadow: 0 0 15px #f1c40f; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 100; text-align: center; width: 100%; }
+        .val { font-size: 20px; color: #f1c40f; font-weight: bold; }
+        #msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 32px; font-weight: bold; color: #fff; text-shadow: 0 0 15px #f1c40f; pointer-events: none; opacity: 0; z-index: 100; text-align: center; width: 100%; }
         
-        /* ボタンのスタイル */
-        .btn { width: 100%; padding: 10px 0; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 5px; }
+        /* ボタンとランキングのスタイル */
+        .btn { width: 100%; padding: 8px 0; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 12px; }
         #pauseBtn { background: #e67e22; }
-        #pauseBtn:hover { background: #d35400; }
         #resetBtn { background: #c0392b; }
-        #resetBtn:hover { background: #a93226; }
+        #rankBtn { background: #2980b9; }
         .paused { filter: blur(4px); pointer-events: none; }
+
+        /* ランキング画面 */
+        #ranking-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 200; border-radius: 15px; }
+        .rank-item { font-size: 18px; margin: 5px 0; color: #fff; }
+        .rank-gold { color: #f1c40f; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="msg"></div>
+    <div id="ranking-overlay">
+        <h2 style="color: #f1c40f;">TOP 5 RECORDS</h2>
+        <div id="rank-list"></div>
+        <button onclick="hideRanking()" class="btn" style="width: 80px; margin-top: 15px; background: #7f8c8d;">閉じる</button>
+    </div>
+
     <div class="sidebar">
         <div class="box">HOLD<canvas id="holdCanvas" width="60" height="60"></canvas></div>
         <div class="box">SCORE<div id="scoreDisplay" class="val">0</div></div>
         <div class="box">LEVEL<div id="levelDisplay" class="val" style="color:#2ecc71;">1</div></div>
         <button id="pauseBtn" class="btn">一時停止</button>
         <button id="resetBtn" class="btn">最初から</button>
+        <button id="rankBtn" class="btn">ランキング</button>
     </div>
     <canvas id="tetrisCanvas" width="300" height="600"></canvas>
     <div class="sidebar">
@@ -66,6 +77,25 @@
         for(let [kx, ky] of kicks) { if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) { currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr; lastMoveWasRotate = true; lockTimer=0; return; } }
     }
 
+    function saveScore(finalScore) {
+        let history = JSON.parse(localStorage.getItem('tetrisRanking')) || [];
+        history.push(finalScore);
+        history.sort((a, b) => b - a);
+        history = history.slice(0, 5);
+        localStorage.setItem('tetrisRanking', JSON.stringify(history));
+        showRanking();
+    }
+
+    function showRanking() {
+        const history = JSON.parse(localStorage.getItem('tetrisRanking')) || [];
+        const list = document.getElementById('rank-list');
+        list.innerHTML = history.map((s, i) => `<div class="rank-item ${i===0?'rank-gold':''}">#${i+1}: ${s.toLocaleString()} pts</div>`).join('');
+        document.getElementById('ranking-overlay').style.display = 'flex';
+        isPaused = true;
+    }
+
+    function hideRanking() { document.getElementById('ranking-overlay').style.display = 'none'; isPaused = false; }
+
     function freeze() {
         let isTSpin = false;
         if(currentPiece.type === 'T' && lastMoveWasRotate) {
@@ -78,34 +108,22 @@
         field = field.filter(row => { if(row.every(v => v!==0)) { lines++; return false; } return true; });
         while(field.length < ROWS) field.unshift(Array(COLS).fill(0));
         let addScore = isTSpin ? ([400, 800, 1200, 1600][lines] || 400) : ([0, 100, 300, 500, 800][lines]);
-        if(lines === 4) showMsg("TETRIS!");
-        if(isTSpin) showMsg("T-SPIN!");
-        score += addScore * level;
-        linesTotal += lines; level = Math.floor(linesTotal/10)+1;
-        document.getElementById('scoreDisplay').innerText = score; document.getElementById('levelDisplay').innerText = level;
+        score += addScore * level; linesTotal += lines; level = Math.floor(linesTotal/10)+1;
+        document.getElementById('scoreDisplay').innerText = score.toLocaleString();
+        document.getElementById('levelDisplay').innerText = level;
         currentPiece = getNextPiece(); canHold = true; updatePreviews();
-        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { alert("GAME OVER"); resetGame(); }
+        if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { saveScore(score); }
     }
 
-    // --- コントロール処理 ---
-    document.getElementById('pauseBtn').onclick = togglePause;
-    document.getElementById('resetBtn').onclick = resetGame;
-
-    function togglePause() {
-        isPaused = !isPaused;
-        document.getElementById('pauseBtn').innerText = isPaused ? "再開" : "一時停止";
-        document.getElementById('tetrisCanvas').className = isPaused ? 'paused' : '';
-        if(isPaused) showMsg("PAUSED");
-        else document.getElementById('msg').style.opacity = 0;
-    }
+    document.getElementById('pauseBtn').onclick = () => { isPaused = !isPaused; document.getElementById('pauseBtn').innerText = isPaused ? "再開" : "一時停止"; };
+    document.getElementById('resetBtn').onclick = () => { if(confirm("リセットしますか？")) resetGame(); };
+    document.getElementById('rankBtn').onclick = showRanking;
 
     function resetGame() {
         field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
         score = 0; level = 1; linesTotal = 0; bag = []; nextQueue = []; holdPieceType = null; canHold = true;
-        document.getElementById('scoreDisplay').innerText = "0";
-        document.getElementById('levelDisplay').innerText = "1";
-        if(isPaused) togglePause();
-        fillBag(); nextQueue = bag.splice(0,5); currentPiece = getNextPiece(); updatePreviews();
+        document.getElementById('scoreDisplay').innerText = "0"; document.getElementById('levelDisplay').innerText = "1";
+        isPaused = false; hideRanking(); fillBag(); nextQueue = bag.splice(0,5); currentPiece = getNextPiece(); updatePreviews();
     }
 
     document.addEventListener('keydown', e => {
