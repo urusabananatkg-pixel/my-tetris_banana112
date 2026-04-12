@@ -35,8 +35,10 @@ function updateRanking(s) {
 }
 
 function displayRanking() {
+    const list = document.getElementById('rankingList');
+    if(!list) return;
     const r = JSON.parse(localStorage.getItem('tetrisRanking') || '[]');
-    document.getElementById('rankingList').innerHTML = r.map((s,i)=>`<div>${i+1}. ${s.toLocaleString()}</div>`).join('') || "No Data";
+    list.innerHTML = r.map((s,i)=>`<div>${i+1}. ${s.toLocaleString()}</div>`).join('') || "No Data";
 }
 
 function fillBag() { let n=['I','J','L','O','S','T','Z']; for(let i=6;i>0;i--){let j=Math.floor(Math.random()*(i+1));[n[i],n[j]]=[n[j],n[i]];} bag=bag.concat(n); }
@@ -50,7 +52,8 @@ function resetLockTimer() { clearTimeout(lockTimer); if(isLanding) lockTimer = s
 
 function updateSpeed() {
     clearInterval(window.gameInterval);
-    const delay = Math.max(50, 800 * Math.pow(0.7, level - 1));
+    // レベルが上がるほど、指数関数的に速くなる設定
+    const delay = Math.max(30, 800 * Math.pow(0.8, level - 1));
     window.gameInterval = setInterval(() => {
         if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
             currentPiece.y++; lastMoveWasRotate = false; handleLocking();
@@ -97,12 +100,12 @@ async function freeze() {
         score += moveScore; linesTotal += l;
         level = Math.floor(linesTotal / 10) + 1;
         document.getElementById('levelDisplay').innerText = level;
-        document.getElementById('scoreDisplay').innerText = score;
+        document.getElementById('scoreDisplay').innerText = score.toLocaleString();
         if(msg) { const mb = document.getElementById('msg'); mb.innerText = msg; mb.style.opacity = 1; setTimeout(()=>mb.style.opacity=0, 1000); }
         updateSpeed();
     }
     currentPiece = getNextPiece(); canHold = true; updatePreviews();
-    if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { updateRanking(score); alert("GAME OVER"); location.reload(); }
+    if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { updateRanking(score); alert("GAME OVER\nSCORE: " + score.toLocaleString()); location.reload(); }
 }
 
 function handleLocking() {
@@ -121,7 +124,6 @@ window.addEventListener('keydown', (e) => {
         dasTimer = setTimeout(() => { arrInterval = setInterval(() => handleKey(k), ARR_SPEED); }, DAS_DELAY);
     }
 });
-
 window.addEventListener('keyup', (e) => {
     const k = e.key.toLowerCase();
     delete keys[k];
@@ -129,12 +131,13 @@ window.addEventListener('keyup', (e) => {
 });
 
 function handleKey(k) {
+    if(!currentPiece) return;
     if(k === 'a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; resetLockTimer(); }
     if(k === 'd' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; resetLockTimer(); }
     if(k === 's') { 
         if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
             currentPiece.y++; 
-            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++;
+            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; // 爆速落下
             lastMoveWasRotate=false; resetLockTimer();
         }
     }
@@ -146,7 +149,10 @@ function handleKey(k) {
 
 function tryRotate(dir) {
     const type = currentPiece.type, oldRot = currentPiece.rotation, newRot = (oldRot + (dir === 1 ? 1 : 3)) % 4;
-    const newShape = (dir === 1) ? currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).map(row => row.reverse()) : currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).reverse();
+    let newShape = currentPiece.shape;
+    if(dir === 1) newShape = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).map(row => row.reverse());
+    else newShape = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i])).reverse();
+    
     const kicks = (type === 'I' ? WALL_KICK['I'] : WALL_KICK['others'])[`${oldRot}-${newRot}`];
     for(let [kx, ky] of kicks) {
         if(!collide(currentPiece.x+kx, currentPiece.y-ky, newShape)) {
@@ -165,16 +171,18 @@ function draw() {
             ctx.fillRect(c*BLOCK_SIZE+1,r*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
         }
     }));
-    let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
-    currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-        if(v){ 
-            ctx.globalAlpha=0.5; // シャドウを濃く(0.5)
-            ctx.fillStyle=currentPiece.color; 
-            ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (g+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
-            ctx.globalAlpha=1; 
-        }
-        if(v){ ctx.fillStyle=isLanding?'#fff':currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }
-    }));
+    if(currentPiece) {
+        let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
+        currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
+            if(v){ 
+                ctx.globalAlpha=0.5; // シャドウ濃いめ
+                ctx.fillStyle=currentPiece.color; 
+                ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (g+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
+                ctx.globalAlpha=1; 
+            }
+            if(v){ ctx.fillStyle=isLanding?'#fff':currentPiece.color; ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }
+        }));
+    }
     requestAnimationFrame(draw);
 }
 
