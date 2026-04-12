@@ -226,7 +226,68 @@ html_code = """
         if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*10+5, y*10+10, 9, 9); } }));
     }
 
-    initQueue(); currentPiece = getNextPiece(); updatePreviews(); updateSpeed(); displayRanking(); draw();
+    initQueue(); currentPiece = getNextPiece(); updatePreviews(); updateSpeed(); displayRanking(); draw();/* --- 変更ポイント --- */
+// 1. ソフトドロップの速度調整 (handleKey関数内)
+// 2. シャドウの色の濃さ (draw関数内)
+
+// (中略：他の変数はそのまま)
+
+    function handleKey(k) {
+        if(k === 'a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; resetLockTimer(); }
+        if(k === 'd' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; resetLockTimer(); }
+        
+        // ソフトドロップ：1回押すごとに2マス落とす設定にして高速化
+        if(k === 's') { 
+            if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) {
+                currentPiece.y++; 
+                // さらに加速したい場合はもう1段落とす
+                if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++;
+                lastMoveWasRotate=false; 
+                resetLockTimer(); 
+            }
+        }
+        
+        if(k === 'w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
+        if(k === 'i' || k === 'j') { if(canHold){ let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }}
+        if(k === 'k') { if(tryRotate(-1)) resetLockTimer(); }
+        if(k === 'l') { if(tryRotate(1)) resetLockTimer(); }
+    }
+
+    function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        
+        // フィールド描画
+        field.forEach((row,r) => row.forEach((v,c) => {
+            if(v) {
+                ctx.fillStyle = flashingLines.includes(r) ? '#fff' : v;
+                ctx.fillRect(c*BLOCK_SIZE+1,r*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
+            }
+        }));
+
+        // シャドウ（ゴースト）の描画
+        let g = currentPiece.y; 
+        while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
+        
+        currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
+            if(v){ 
+                // 透明度を 0.2 -> 0.5 に引き上げて濃くしました
+                ctx.globalAlpha = 0.5; 
+                ctx.fillStyle = currentPiece.color; 
+                ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE + 1, (g+y)*BLOCK_SIZE + 1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
+                
+                // 枠線もつけるとさらに見やすくなります
+                ctx.strokeStyle = "rgba(255,255,255,0.5)";
+                ctx.strokeRect((currentPiece.x+x)*BLOCK_SIZE + 1, (g+y)*BLOCK_SIZE + 1, BLOCK_SIZE-2, BLOCK_SIZE-2);
+                ctx.globalAlpha = 1.0; 
+            }
+            // 操作中のミノ
+            if(v){ 
+                ctx.fillStyle = isLanding ? '#fff' : currentPiece.color; 
+                ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE+1, (currentPiece.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
+            }
+        }));
+        requestAnimationFrame(draw);
+    }
 </script>
 """
 
