@@ -2,54 +2,70 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Pro - REN System Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tetris Pro - Mobile Edition</title>
     <style>
-        body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; flex-direction: column; overflow: hidden; }
-        #game-container { display: flex; gap: 20px; background: #222; padding: 25px; border-radius: 15px; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,1); position: relative; }
-        .sidebar { width: 110px; display: flex; flex-direction: column; gap: 10px; }
-        .box { background: #333; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #555; }
-        #tetrisCanvas { border: 4px solid #666; background: #000; display: block; }
-        .val { font-size: 20px; color: #f1c40f; font-weight: bold; }
+        body { background: #111; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: sans-serif; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+        #game-container { display: flex; gap: 10px; background: #222; padding: 15px; border-radius: 15px; border: 2px solid #444; position: relative; }
+        .sidebar { width: 80px; display: flex; flex-direction: column; gap: 8px; }
+        .box { background: #333; padding: 5px; border-radius: 8px; text-align: center; border: 1px solid #555; font-size: 10px; }
+        #tetrisCanvas { border: 2px solid #666; background: #000; width: 200px; height: 400px; }
+        .val { font-size: 16px; color: #f1c40f; font-weight: bold; }
         
-        /* REN/メッセージ表示 */
-        #msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 32px; font-weight: bold; color: #fff; text-shadow: 0 0 15px #f1c40f; pointer-events: none; opacity: 0; z-index: 100; text-align: center; width: 100%; }
-        #ren-display { position: absolute; left: 50%; top: 55%; transform: translateX(-50%); font-size: 28px; font-weight: bold; color: #3498db; text-shadow: 0 0 10px #2980b9; opacity: 0; transition: opacity 0.2s; z-index: 100; }
-
-        .btn { width: 100%; padding: 8px 0; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 12px; }
-        #pauseBtn { background: #e67e22; }
-        #resetBtn { background: #c0392b; }
-        #rankBtn { background: #2980b9; }
-        .paused { filter: blur(4px); pointer-events: none; }
-
-        #ranking-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 200; border-radius: 15px; }
-        .rank-item { font-size: 18px; margin: 5px 0; color: #fff; }
-        .rank-gold { color: #f1c40f; font-weight: bold; }
+        /* 操作ボタンエリア */
+        #controls-panel { margin-top: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 320px; }
+        .ctrl-group { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+        .btn { background: #444; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .move-btn { width: 60px; height: 50px; font-size: 20px; }
+        .action-btn { width: 70px; height: 50px; font-size: 14px; background: #2980b9; }
+        .btn:active { background: #666; transform: scale(0.95); }
+        .special-btn { background: #27ae60; font-size: 12px; height: 40px; width: 100%; }
+        
+        #msg { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); font-size: 24px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #f1c40f; opacity: 0; z-index: 100; pointer-events: none; }
+        #ranking-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="msg"></div>
-    <div id="ren-display"></div>
-    
     <div id="ranking-overlay">
-        <h2 style="color: #f1c40f;">TOP 5 RECORDS</h2>
-        <div id="rank-list"></div>
-        <button onclick="hideRanking()" class="btn" style="width: 80px; margin-top: 15px; background: #7f8c8d;">閉じる</button>
+        <h3 style="color: #f1c40f;">TOP 5</h3>
+        <div id="rank-list" style="margin-bottom: 10px;"></div>
+        <button onclick="hideRanking()" class="btn action-btn">閉じる</button>
     </div>
 
     <div class="sidebar">
-        <div class="box">HOLD<canvas id="holdCanvas" width="60" height="60"></canvas></div>
+        <div class="box">HOLD<canvas id="holdCanvas" width="50" height="50"></canvas></div>
         <div class="box">SCORE<div id="scoreDisplay" class="val">0</div></div>
-        <div class="box">LEVEL<div id="levelDisplay" class="val" style="color:#2ecc71;">1</div></div>
-        <button id="pauseBtn" class="btn">一時停止</button>
-        <button id="resetBtn" class="btn">最初から</button>
-        <button id="rankBtn" class="btn">ランキング</button>
+        <button id="pauseBtn" class="btn special-btn">PAUSE</button>
+        <button id="resetBtn" class="btn special-btn" style="background:#c0392b;">RESET</button>
     </div>
+
     <canvas id="tetrisCanvas" width="300" height="600"></canvas>
+
     <div class="sidebar">
-        <div class="box">NEXT<canvas id="nextCanvas" width="60" height="300"></canvas></div>
+        <div class="box">NEXT<canvas id="nextCanvas" width="50" height="200"></canvas></div>
+        <div class="box">LEVEL<div id="levelDisplay" class="val">1</div></div>
+        <button id="rankBtn" class="btn special-btn">RANK</button>
+    </div>
+</div>
+
+<div id="controls-panel">
+    <div class="ctrl-group">
+        <button class="btn action-btn" onmousedown="tryRotate(-1)" ontouchstart="tryRotate(-1)">左回転</button>
+        <button class="btn move-btn" onmousedown="startMove('left')" ontouchstart="startMove('left')">←</button>
+    </div>
+    <div class="ctrl-group">
+        <button class="btn move-btn" onmousedown="dropSoft()" ontouchstart="dropSoft()">↓</button>
+        <button class="btn action-btn" style="background:#e67e22;" onmousedown="dropHard()" ontouchstart="dropHard()">HARD</button>
+    </div>
+    <div class="ctrl-group">
+        <button class="btn action-btn" onmousedown="tryRotate(1)" ontouchstart="tryRotate(1)">右回転</button>
+        <button class="btn move-btn" onmousedown="startMove('right')" ontouchstart="startMove('right')">→</button>
+    </div>
+    <div style="grid-column: span 3;">
+        <button class="btn action-btn" style="width:100%; background:#8e44ad;" onmousedown="handleHold()" ontouchstart="handleHold()">HOLD (I / J)</button>
     </div>
 </div>
 
@@ -63,33 +79,19 @@
     const KICKS = { "0-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "1-0":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "1-2":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "2-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "2-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "3-2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "3-0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "0-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "I":{"0-1":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],"1-0":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],"1-2":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]],"2-1":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],"2-3":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],"3-2":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],"3-0":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],"0-3":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]}};
 
     let field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-    let score = 0, level = 1, linesTotal = 0, bag = [], nextQueue = [], currentPiece = null, holdPieceType = null, canHold = true;
-    let lockTimer = 0, lastTime = 0, lastMoveWasRotate = false, isPaused = false;
-    let renCount = -1; // 連（コンボ）カウンター
+    let score = 0, level = 1, linesTotal = 0, bag = [], nextQueue = [], currentPiece = null, holdPieceType = null, canHold = true, isPaused = false, lastTime = 0, lockTimer = 0, renCount = -1, lastMoveWasRotate = false;
 
-    function showMsg(text) { const m = document.getElementById('msg'); m.innerText = text; m.style.opacity = 1; setTimeout(() => { if(!isPaused) m.style.opacity = 0; }, 800); }
-    
-    function showRen(count) {
-        const r = document.getElementById('ren-display');
-        if (count > 0) {
-            r.innerText = `${count} REN!`;
-            r.style.opacity = 1;
-            setTimeout(() => { r.style.opacity = 0; }, 800);
-        } else {
-            r.style.opacity = 0;
-        }
-    }
-
+    function showMsg(text) { const m = document.getElementById('msg'); m.innerText = text; m.style.opacity = 1; setTimeout(() => m.style.opacity = 0, 800); }
     function fillBag() { let n = Object.keys(SHAPES); for(let i=6;i>0;i--){ let j=Math.floor(Math.random()*(i+1)); [n[i],n[j]]=[n[j],n[i]]; } bag = bag.concat(n); }
     function getNextPiece(type = null) { if(!type){ if(bag.length<7) fillBag(); type = nextQueue.shift(); nextQueue.push(bag.shift()); } return { type, shape: SHAPES[type], color: COLORS[type], x: 3, y: 0, rot: 0 }; }
     function collide(nx, ny, s) { return s.some((row, y) => row.some((v, x) => v && (nx+x<0 || nx+x>=COLS || ny+y>=ROWS || (ny+y>=0 && field[ny+y][nx+x])))); }
 
     function tryRotate(dir) {
-        if(currentPiece.type==='O' || isPaused) return;
+        if(isPaused || !currentPiece || currentPiece.type==='O') return;
         const ns = dir===1 ? currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i]).reverse()) : currentPiece.shape[0].map((_,i)=>currentPiece.shape.map(r=>r[i])).reverse();
         const nr = (currentPiece.rot + dir + 4) % 4;
         const kicks = currentPiece.type==='I' ? KICKS.I[`${currentPiece.rot}-${nr}`] : KICKS[`${currentPiece.rot}-${nr}`];
-        for(let [kx, ky] of kicks) { if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) { currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr; lastMoveWasRotate = true; lockTimer=0; return; } }
+        for(let [kx, ky] of kicks) { if(!collide(currentPiece.x+kx, currentPiece.y-ky, ns)) { currentPiece.x+=kx; currentPiece.y-=ky; currentPiece.shape=ns; currentPiece.rot=nr; lastMoveWasRotate=true; lockTimer=0; return; } }
     }
 
     function freeze() {
@@ -99,26 +101,10 @@
             [[0,0],[2,0],[0,2],[2,2]].forEach(([dx,dy]) => { let tx=currentPiece.x+dx, ty=currentPiece.y+dy; if(tx<0||tx>=COLS||ty>=ROWS||(ty>=0&&field[ty][tx])) corners++; });
             if(corners >= 3) isTSpin = true;
         }
-
         currentPiece.shape.forEach((row, y) => row.forEach((v, x) => { if(v && currentPiece.y+y>=0) field[currentPiece.y+y][currentPiece.x+x] = currentPiece.color; }));
-        
-        let lines = 0;
-        field = field.filter(row => { if(row.every(v => v!==0)) { lines++; return false; } return true; });
+        let lines = 0; field = field.filter(row => { if(row.every(v => v!==0)) { lines++; return false; } return true; });
         while(field.length < ROWS) field.unshift(Array(COLS).fill(0));
-
-        if (lines > 0) {
-            renCount++; // 消せばRENが増える
-            showRen(renCount);
-            let renBonus = renCount > 0 ? renCount * 50 : 0;
-            let baseScore = isTSpin ? ([400, 800, 1200, 1600][lines] || 400) : ([0, 100, 300, 500, 800][lines]);
-            
-            score += (baseScore + renBonus) * level;
-            if(lines === 4) showMsg("TETRIS!");
-            if(isTSpin) showMsg("T-SPIN!");
-        } else {
-            renCount = -1; // 消せなければREN終了
-        }
-
+        if (lines > 0) { renCount++; let renBonus = renCount > 0 ? renCount * 50 : 0; let base = isTSpin ? ([400, 800, 1200, 1600][lines] || 400) : ([0, 100, 300, 500, 800][lines]); score += (base + renBonus) * level; if(lines===4) showMsg("TETRIS!"); if(isTSpin) showMsg("T-SPIN!"); } else { renCount = -1; }
         linesTotal += lines; level = Math.floor(linesTotal/10)+1;
         document.getElementById('scoreDisplay').innerText = score.toLocaleString();
         document.getElementById('levelDisplay').innerText = level;
@@ -126,64 +112,42 @@
         if(collide(currentPiece.x, currentPiece.y, currentPiece.shape)) { saveScore(score); }
     }
 
-    // --- 各種保存・リセット ---
-    function saveScore(finalScore) {
-        let history = JSON.parse(localStorage.getItem('tetrisRanking')) || [];
-        history.push(finalScore); history.sort((a, b) => b - a); history = history.slice(0, 5);
-        localStorage.setItem('tetrisRanking', JSON.stringify(history)); showRanking();
-    }
-    function showRanking() {
-        const history = JSON.parse(localStorage.getItem('tetrisRanking')) || [];
-        const list = document.getElementById('rank-list');
-        list.innerHTML = history.map((s, i) => `<div class="rank-item ${i===0?'rank-gold':''}">#${i+1}: ${s.toLocaleString()} pts</div>`).join('');
-        document.getElementById('ranking-overlay').style.display = 'flex'; isPaused = true;
-    }
-    function hideRanking() { document.getElementById('ranking-overlay').style.display = 'none'; isPaused = false; }
+    // 操作系関数
+    function startMove(dir) { if(isPaused) return; if(dir==='left' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) currentPiece.x--; if(dir==='right' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) currentPiece.x++; lastMoveWasRotate=false; }
+    function dropSoft() { if(!isPaused && !collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; }
+    function dropHard() { if(isPaused) return; while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
+    function handleHold() { if(!isPaused && canHold) { let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); } }
 
-    document.getElementById('pauseBtn').onclick = () => { isPaused = !isPaused; document.getElementById('pauseBtn').innerText = isPaused ? "再開" : "一時停止"; };
-    document.getElementById('resetBtn').onclick = () => { if(confirm("リセットしますか？")) resetGame(); };
+    function saveScore(s) { let h = JSON.parse(localStorage.getItem('tetrisRanking')) || []; h.push(s); h.sort((a,b)=>b-a); localStorage.setItem('tetrisRanking', JSON.stringify(h.slice(0,5))); showRanking(); }
+    function showRanking() { const h = JSON.parse(localStorage.getItem('tetrisRanking')) || []; document.getElementById('rank-list').innerHTML = h.map((s,i)=>`<div>#${i+1}: ${s.toLocaleString()}</div>`).join(''); document.getElementById('ranking-overlay').style.display='flex'; isPaused=true; }
+    function hideRanking() { document.getElementById('ranking-overlay').style.display='none'; isPaused=false; }
+    function resetGame() { field = Array.from({ length: ROWS }, () => Array(COLS).fill(0)); score=0; level=1; linesTotal=0; bag=[]; nextQueue=[]; holdPieceType=null; canHold=true; isPaused=false; fillBag(); nextQueue=bag.splice(0,5); currentPiece=getNextPiece(); updatePreviews(); document.getElementById('scoreDisplay').innerText="0"; document.getElementById('levelDisplay').innerText="1"; }
+
+    document.getElementById('pauseBtn').onclick = () => { isPaused = !isPaused; document.getElementById('pauseBtn').innerText = isPaused ? "RESUME" : "PAUSE"; };
+    document.getElementById('resetBtn').onclick = () => { if(confirm("RESET?")) resetGame(); };
     document.getElementById('rankBtn').onclick = showRanking;
 
-    function resetGame() {
-        field = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-        score = 0; level = 1; linesTotal = 0; bag = []; nextQueue = []; holdPieceType = null; canHold = true; renCount = -1;
-        document.getElementById('scoreDisplay').innerText = "0"; document.getElementById('levelDisplay').innerText = "1";
-        isPaused = false; hideRanking(); fillBag(); nextQueue = bag.splice(0,5); currentPiece = getNextPiece(); updatePreviews();
-    }
-
+    // キーボード対応も継続
     document.addEventListener('keydown', e => {
-        if(isPaused) return;
         const k = e.key.toLowerCase();
-        if(k==='a' && !collide(currentPiece.x-1, currentPiece.y, currentPiece.shape)) { currentPiece.x--; lastMoveWasRotate=false; lockTimer=0; }
-        if(k==='d' && !collide(currentPiece.x+1, currentPiece.y, currentPiece.shape)) { currentPiece.x++; lastMoveWasRotate=false; lockTimer=0; }
-        if(k==='s' && !collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lastMoveWasRotate=false; }
-        if(k==='w') { while(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) currentPiece.y++; freeze(); }
-        if(k==='k') tryRotate(-1); if(k==='l') tryRotate(1);
-        if((k==='i'||k==='j') && canHold) { let t=holdPieceType; holdPieceType=currentPiece.type; currentPiece=getNextPiece(t); canHold=false; updatePreviews(); }
+        if(k==='a') startMove('left'); if(k==='d') startMove('right'); if(k==='s') dropSoft(); if(k==='w') dropHard(); if(k==='k') tryRotate(-1); if(k==='l') tryRotate(1); if(k==='i'||k==='j') handleHold();
     });
 
     function updatePreviews() {
-        nextCtx.clearRect(0,0,60,300); nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*10+10, i*55+y*10+10, 9, 9); }})));
-        holdCtx.clearRect(0,0,60,60); if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*12+10, y*12+10, 11, 11); }}));
+        nextCtx.clearRect(0,0,50,200); nextQueue.forEach((t,i) => SHAPES[t].forEach((row,y) => row.forEach((v,x) => { if(v){ nextCtx.fillStyle=COLORS[t]; nextCtx.fillRect(x*8+10, i*35+y*8+10, 7, 7); }})));
+        holdCtx.clearRect(0,0,50,50); if(holdPieceType) SHAPES[holdPieceType].forEach((row,y) => row.forEach((v,x) => { if(v){ holdCtx.fillStyle=COLORS[holdPieceType]; holdCtx.fillRect(x*10+5, y*10+5, 9, 9); }}));
     }
 
     function gameLoop(time = 0) {
         if(!isPaused) {
-            const gravityDelay = Math.max(80, 800 - (level - 1) * 80);
-            if(time - lastTime > gravityDelay) {
-                if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lockTimer=0; }
-                else { if(lockTimer===0) lockTimer=time; else if(time-lockTimer>500) { freeze(); lockTimer=0; } }
-                lastTime = time;
-            }
+            const gravity = Math.max(80, 800 - (level - 1) * 80);
+            if(time - lastTime > gravity) { if(!collide(currentPiece.x, currentPiece.y+1, currentPiece.shape)) { currentPiece.y++; lockTimer=0; } else { if(lockTimer===0) lockTimer=time; else if(time-lockTimer>500) { freeze(); lockTimer=0; } } lastTime = time; }
         }
         ctx.clearRect(0,0,300,600);
         field.forEach((row,y) => row.forEach((v,x) => { if(v){ ctx.fillStyle=v; ctx.fillRect(x*30+1, y*30+1, 28, 28); }}));
         if(currentPiece) {
             let g = currentPiece.y; while(!collide(currentPiece.x, g+1, currentPiece.shape)) g++;
-            currentPiece.shape.forEach((row,y) => row.forEach((v,x) => {
-                if(v){ ctx.globalAlpha=0.3; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (g+y)*30+1, 28, 28); ctx.globalAlpha=1;
-                       ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1, (currentPiece.y+y)*30+1, 28, 28); }
-            }));
+            currentPiece.shape.forEach((row,y) => row.forEach((v,x) => { if(v){ ctx.globalAlpha=0.2; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1,(g+y)*30+1,28,28); ctx.globalAlpha=1; ctx.fillStyle=currentPiece.color; ctx.fillRect((currentPiece.x+x)*30+1,(currentPiece.y+y)*30+1,28,28); }}));
         }
         requestAnimationFrame(gameLoop);
     }
